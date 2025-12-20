@@ -1,106 +1,73 @@
-# App Certifications Manager
+# Keystore Vault — مخزن مفاتيح توقيع تطبيقات Android
 
-A repository for managing Android app signing keys and certificates with automated generation tools.
+هذا المشروع وظيفته **حفظ ملفات التوقيع (Keystore) وملفات `key.properties` لكل تطبيقاتك في مكان واحد** بعيد عن مشاريع التطبيقات، علشان تقلل جدًا خطر ضياع المفاتيح.
 
-## Quick Start
+> ⚠️ مهم جدًا: ملفات التوقيع وملفات الخصائص **أسرار**. لا ترفعها لمستودع عام أبدًا.
 
-### Generate a New Keystore (Automated)
+---
 
-Use the Dart script to generate a new keystore with one command:
+## الفكرة في سطرين
+- لكل تطبيق عندك فولدر مستقل داخل الـ Vault.
+- كل فولدر يحتوي:
+  - `cert/key.jks` (الـ Keystore)
+  - `key.properties` (بيانات الربط في Gradle/Flutter)
 
+هذا نفس الهيكل المذكور في النسخة السابقة من الـ README (وجود `[app_name]/cert/key.jks` و`key.properties`). fileciteturn0file0L21-L27
+
+---
+
+## المتطلبات
+- Dart SDK
+- Java JDK (عشان `keytool`)
+
+تأكد إن الأمر ده شغال:
+```bash
+keytool -help
+```
+
+---
+
+## توليد Keystore جديد (الطريقة المفضلة)
+
+### تفاعليًا (Interactive)
 ```bash
 dart generate_keystore.dart
 ```
+سيطلب منك **اسم التطبيق فقط** (مثل: `my_app`) ويستخدم إعدادات افتراضية للباقي.
 
-The script will only ask for the **app name**. Everything else is automatically configured:
-- Password: Auto-generated secure password
-- Key alias: `key` (default)
-- Certificate details: Default values from saved configuration
-
-**Note:** The script saves all configuration (including the password) to `.keystore_config.json` and reuses it for future keystores. This means you only need to enter the app name for subsequent keystore generations!
-
-### Manual Keystore Generation
-
-If you prefer to create a keystore manually:
-
+### وضع CI/CD (بدون تفاعل)
 ```bash
-keytool -genkey -v -keystore key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias your-key-alias
+dart generate_keystore.dart --ci --app my_app --print-password
 ```
 
-## Repository Structure
+> في وضع CI يمكن أيضًا تمرير القيم عبر Environment Variables:
+- `APP_NAME`
+- `KEYSTORE_PASSWORD` (اختياري)
+- `KEY_PASSWORD` (اختياري)
 
+---
+
+## أين تُحفظ الملفات؟
+بعد التوليد ستجد:
 ```
-app_certifications/
-├── README.md
-├── generate_keystore.dart       # Automated keystore generator
-└── [app_name]/
-    ├── cert/
-    │   └── key.jks              # Java KeyStore file
-    └── key.properties           # Keystore configuration
+my_app/
+  cert/
+    key.jks
+  key.properties
 ```
 
-## How to Create a Keystore
+---
 
-### Prerequisites
+## طريقة ربط الملفات داخل مشروع Flutter/Android
 
-- Java Development Kit (JDK) installed
-- `keytool` command available (comes with JDK)
-
-### Method 1: Using the Dart Script (Recommended)
-
-1. Run the generator:
-   ```bash
-   dart generate_keystore.dart
-   ```
-
-2. Follow the interactive prompts
-
-3. Your keystore will be created in `[app_name]/cert/key.jks`
-
-### Method 2: Manual Creation
-
-1. **Generate the keystore:**
-   ```bash
-   keytool -genkey -v -keystore key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias my-key-alias
-   ```
-
-2. **Create directory structure:**
-   ```bash
-   mkdir -p my_app/cert
-   mv key.jks my_app/cert/
-   ```
-
-3. **Create key.properties file:**
-   ```properties
-   storePassword=your-store-password
-   keyPassword=your-key-password
-   keyAlias=my-key-alias
-   storeFile=cert/key.jks
-   ```
-
-### Keystore Parameters Explained
-
-- **keystore**: Output filename for your keystore
-- **keyalg**: Algorithm (RSA recommended)
-- **keysize**: Key size in bits (2048 or higher)
-- **validity**: Validity period in days (10000 = ~27 years)
-- **alias**: Unique identifier for this key
-
-## Using the Keystore in Your Flutter/Android Project
-
-### Step 1: Copy Files
-
-Copy the app directory to your Flutter project:
-
+داخل مشروع Flutter:
+1) انسخ الملفات:
 ```bash
-cp -r my_app/key.properties android/
-cp -r my_app/cert android/
+cp -r <vault>/my_app/cert android/
+cp <vault>/my_app/key.properties android/
 ```
 
-### Step 2: Update build.gradle
-
-Edit `android/app/build.gradle`:
-
+2) عدّل `android/app/build.gradle` (مثال مختصر):
 ```gradle
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file('key.properties')
@@ -109,139 +76,63 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    ...
-    
-    signingConfigs {
-        release {
-            keyAlias keystoreProperties['keyAlias']
-            keyPassword keystoreProperties['keyPassword']
-            storeFile file(keystoreProperties['storeFile'])
-            storePassword keystoreProperties['storePassword']
-        }
-    }
-    
-    buildTypes {
-        release {
-            signingConfig signingConfigs.release
-            minifyEnabled true
-            shrinkResources true
-        }
-    }
-}
-```
-
-### Step 3: Build Signed APK/AAB
-
-```bash
-# Build APK
-flutter build apk --release
-
-# Build App Bundle
-flutter build appbundle --release
-```
-
-## Verifying Your Keystore
-
-Check keystore information:
-
-```bash
-keytool -list -v -keystore cert/key.jks -alias your-alias
-```
-
-Check APK signature:
-
-```bash
-keytool -printcert -jarfile app-release.apk
-```
-
-## Security Best Practices
-
-⚠️ **CRITICAL SECURITY NOTES**
-
-1. **Never commit to public repositories**
-   - Add to `.gitignore` in your app projects
-   - Keep this repo private
-
-2. **Backup Strategy**
-   - Store encrypted backups in multiple secure locations
-   - Use cloud storage with encryption (Google Drive, Dropbox, 1Password)
-   - Keep offline copies in secure physical locations
-
-3. **Access Control**
-   - Limit access to authorized team members only
-   - Use strong, unique passwords
-   - Consider using a password manager
-
-4. **Password Management**
-   - Use strong passwords (16+ characters)
-   - Don't reuse passwords across apps
-   - Store passwords separately from keystores
-
-5. **If Keys Are Lost**
-   - You **cannot** update your published app
-   - You must publish as a new app with a new package name
-   - All existing users must reinstall
-
-## Troubleshooting
-
-### Command Not Found: keytool
-
-Install JDK:
-```bash
-# macOS
-brew install openjdk
-
-# Linux (Ubuntu/Debian)
-sudo apt install openjdk-11-jdk
-
-# Check installation
-keytool -version
-```
-
-### Permission Denied
-
-Make script executable:
-```bash
-chmod +x generate_keystore.dart
-```
-
-### Keystore Password Forgotten
-
-Unfortunately, there's no way to recover a forgotten keystore password. You must:
-1. Generate a new keystore
-2. Publish as a new app (if already published)
-
-## Adding to .gitignore
-
-Add these lines to your Flutter project's `.gitignore`:
-
-```gitignore
-# Keystore files
-*.jks
-*.keystore
-key.properties
-android/key.properties
-android/cert/
-.keystore_config.json
-```
-
-## Environment Variables (Alternative)
-
-For CI/CD pipelines, use environment variables instead of committed files:
-
-```gradle
-signingConfigs {
+  signingConfigs {
     release {
-        keyAlias System.getenv("KEY_ALIAS")
-        keyPassword System.getenv("KEY_PASSWORD")
-        storeFile file(System.getenv("KEYSTORE_FILE"))
-        storePassword System.getenv("KEYSTORE_PASSWORD")
+      keyAlias keystoreProperties['keyAlias']
+      keyPassword keystoreProperties['keyPassword']
+      storeFile file(keystoreProperties['storeFile'])
+      storePassword keystoreProperties['storePassword']
     }
+  }
 }
 ```
 
-## Support
+(الفكرة الأساسية موجودة أيضًا في README القديم). fileciteturn0file0L86-L115
 
-For issues or questions about keystore generation, refer to:
-- [Android Developer Documentation](https://developer.android.com/studio/publish/app-signing)
-- [Flutter Deployment Guide](https://docs.flutter.dev/deployment/android)
+---
+
+## إعدادات السكربت وملف الكونفيج
+السكربت يستخدم ملف:
+- `.keystore_config.json`
+
+✅ افتراضيًا: يحفظ **إعدادات غير سرّية فقط** (مثل alias وبيانات الشهادة).  
+⚠️ لا يحفظ كلمة المرور إلا إذا استخدمت:
+```bash
+dart generate_keystore.dart --save-password
+```
+
+> لا نوصي بهذا إلا لو الريبو **خاص** وعندك Access Controls قوية، ومع ذلك تأكد إن الملف في `.gitignore`.
+
+---
+
+## مميزات النسخة المحسّنة من السكربت
+- توليد كلمة مرور قوية بـ `Random.secure()`
+- منع الكتابة فوق ملفات موجودة إلا مع `--overwrite`
+- وضع CI عبر `--ci` و Env Vars
+- خيار تحقق `--verify`
+- خيار إظهار كلمة المرور فقط عند الحاجة `--print-password`
+
+---
+
+## GitHub Actions (Workflow جاهز)
+ستجد Workflow جاهز في:
+`.github/workflows/keystore_vault.yml`
+
+- يعمل **Lint/Analyze/Format** للسكربت.
+- ويحتوي تشغيل يدوي (workflow_dispatch) لتوليد Keystore في CI عند الحاجة.
+
+> ⚠️ تذكير: رفع keystore كـ artifact في GitHub Actions قد يكون خطرًا إذا كانت إعدادات الخصوصية غير مضبوطة. استخدمه فقط داخل Repo خاص وبسياسة وصول صارمة.
+
+---
+
+## .gitignore المقترح
+استخدم الملف المرفق `.gitignore` داخل هذا الـ Vault.
+
+---
+
+## Best Practices سريعة
+- اعمل Backup مشفر (1Password / Bitwarden / Google Drive مشفر)
+- نسختين على الأقل في أماكن مختلفة
+- لا تشارك كلمات المرور على الشات أو التذاكر
+
+راجع أيضًا: `SECURITY.md`

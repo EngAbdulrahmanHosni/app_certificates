@@ -1,98 +1,162 @@
 #!/usr/bin/env dart
+// ignore_for_file: avoid_print
+/*
+  Android Keystore Generator (secure-ish, CI/CD friendly)
 
-import 'dart:io';
+  Features:
+  - Interactive by default
+  - Strong password generation (Random.secure)
+  - Prevents accidental overwrite unless --overwrite
+  - Optional verification step (--verify)
+  - CI/CD mode: non-interactive via flags/env (--ci)
+  - Config file stores NON-secret defaults by default
+  - ALL apps are generated under ./apps/<app_name>/
+*/
+
 import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
 
-void main(List<String> args) async {
-  print('═══════════════════════════════════════════════════');
-  print('   Android Keystore Generator');
-  print('═══════════════════════════════════════════════════\n');
+const _configFileName = '.keystore_config.json';
+const _appsBaseDir = 'apps';
 
-  // Check if keytool is available
-  if (!await isKeytoolAvailable()) {
-    print('❌ Error: keytool command not found!');
-    print('Please install Java JDK:');
-    print('  macOS:   brew install openjdk');
-    print('  Linux:   sudo apt install openjdk-11-jdk');
-    print('  Windows: Download from https://www.oracle.com/java/technologies/downloads/');
+Future<void> main(List<String> args) async {
+  final flags = _parseArgs(args);
+
+  _banner();
+
+  // Check keytool
+  if (!await _isKeytoolAvailable()) {
+    _err('keytool command not found.');
+    print('Install Java JDK then ensure "keytool" is in PATH.');
     exit(1);
   }
 
-  // Load saved configuration if exists
-  final config = await loadConfig();
-  
-  // Gather information
-  print('Please provide the following information:\n');
+  final config = await _loadConfig();
+  final ciMode = flags.boolFlag('ci') || (Platform.environment['CI'] == 'true');
 
-  final appName = prompt('App name (e.g., my_app)', required: true);
-  
-  // Use saved config or defaults for everything else
-  final keyAlias = config['keyAlias'] ?? 'key';
-  final storePassword = config['storePassword'] ?? generatePassword();
-  final keyPassword = storePassword;
-  
-  final commonName = config['commonName'] ?? 'Unknown';
-  final organizationalUnit = config['organizationalUnit'] ?? 'Development';
-  final organization = config['organization'] ?? 'My Company';
-  final city = config['city'] ?? 'Unknown';
-  final state = config['state'] ?? 'Unknown';
-  final countryCode = config['countryCode'] ?? 'US';
-  final validity = config['validity'] ?? '10000';
-  
-  print('\n✅ Using configuration:');
-  print('   Key alias: $keyAlias');
-  print('   Organization: $organization');
-  print('   Validity: $validity days\n');
+  // App name
+  final appName = flags.value('app') ??
+      (ciMode
+          ? (Platform.environment['APP_NAME'] ?? '')
+          : _prompt('App name (e.g., my_app)', required: true));
 
-  // Create directory structure
-  final certDir = Directory('$appName/cert');
-  
-  print('\n📁 Creating directory structure...');
+  if (appName.trim().isEmpty) {
+    _err('App name is required.');
+    exit(2);
+  }
+
+  final safeAppDir = _sanitizeDirName(appName.trim());
+  if (safeAppDir != appName.trim()) {
+    print('ℹ️  Using safe directory name: "$safeAppDir"');
+  }
+
+  // Ensure apps/ exists
+  final appsDir = Directory(_appsBaseDir);
+  if (!await appsDir.exists()) {
+    await appsDir.create(recursive: true);
+  }
+
+  // Defaults (non-secret)
+  final keyAlias = flags.value('alias') ?? config['keyAlias'] ?? 'key';
+  final validity = flags.value('validity') ?? config['validity'] ?? '10000';
+
+  final commonName = flags.value('cn') ?? config['commonName'] ?? 'Unknown';
+  final organizationalUnit =
+      flags.value('ou') ?? config['organizationalUnit'] ?? 'Development';
+  final organization =
+      flags.value('o') ?? config['organization'] ?? 'My Company';
+  final city = flags.value('l') ?? config['city'] ?? 'Unknown';
+  final state = flags.value('st') ?? config['state'] ?? 'Unknown';
+  final countryCode = flags.value('c') ?? config['countryCode'] ?? 'US';
+
+  // Passwords
+  final savePassword = flags.boolFlag('save-password');
+  final storePassword =
+      flags.value('storepass') ??
+          Platform.environment['KEYSTORE_PASSWORD'] ??
+          (config.containsKey('storePassword')
+              ? config['storePassword']!
+              : _generatePassword());
+
+  final keyPassword =
+      flags.value('keypass') ??
+          Platform.environment['KEY_PASSWORD'] ??
+          storePassword;
+
+  // Paths
+  final appBasePath = '$_appsBaseDir/$safeAppDir';
+  final certDir = Directory('$appBasePath/cert');
+  final keystorePath = '${certDir.path}/key.jks';
+  final propertiesFile = File('$appBasePath/key.properties');
+
+  // Overwrite protection
+  final overwrite = flags.boolFlag('overwrite');
+  if (!overwrite) {
+    if (await File(keystorePath).exists() ||
+        await propertiesFile.exists()) {
+      _err('App "$safeAppDir" already exists inside "$_appsBaseDir/".');
+      print('Use --overwrite to replace existing files.');
+      exit(3);
+    }
+  }
+
+  // Create directories
   await certDir.create(recursive: true);
 
+  final dname =
+      'CN=$commonName, OU=$organizationalUnit, O=$organization, L=$city, ST=$state, C=$countryCode';
+
+  print('\n✅ Configuration:');
+  print('   App path:      $appBasePath');
+  print('   Alias:         $keyAlias');
+  print('   Validity:      $validity days');
+  print(flags.boolFlag('print-password')
+      ? '   Password:      $storePassword'
+      : '   Password:      (hidden)');
+
   // Generate keystore
-  print('🔐 Generating keystore...\n');
-
-  final keystorePath = '${certDir.path}/key.jks';
-  final dname = 'CN=$commonName, OU=$organizationalUnit, O=$organization, L=$city, ST=$state, C=$countryCode';
-
-  final result = await Process.run('keytool', [
-    '-genkey',
+  print('\n🔐 Generating keystore...');
+  final genResult = await _runKeytool([
+    '-genkeypair',
     '-v',
-    '-keystore', keystorePath,
-    '-keyalg', 'RSA',
-    '-keysize', '2048',
-    '-validity', validity,
-    '-alias', keyAlias,
-    '-storepass', storePassword,
-    '-keypass', keyPassword,
-    '-dname', dname,
+    '-keystore',
+    keystorePath,
+    '-storetype',
+    'JKS',
+    '-keyalg',
+    'RSA',
+    '-keysize',
+    '2048',
+    '-validity',
+    validity,
+    '-alias',
+    keyAlias,
+    '-storepass',
+    storePassword,
+    '-keypass',
+    keyPassword,
+    '-dname',
+    dname,
   ]);
 
-  if (result.exitCode != 0) {
-    print('❌ Error generating keystore:');
-    print(result.stderr);
-    exit(1);
+  if (genResult.exitCode != 0) {
+    stderr.write(genResult.stderr);
+    exit(10);
   }
+  stdout.write(genResult.stdout);
 
-  print(result.stdout);
-
-  // Create key.properties file
-  print('\n📝 Creating key.properties file...');
-  
-  final propertiesContent = '''storePassword=$storePassword
+  // key.properties
+  await propertiesFile.writeAsString('''
+storePassword=$storePassword
 keyPassword=$keyPassword
 keyAlias=$keyAlias
 storeFile=cert/key.jks
-''';
+''', flush: true);
 
-  final propertiesFile = File('$appName/key.properties');
-  await propertiesFile.writeAsString(propertiesContent);
-
-  // Save configuration for future use
-  await saveConfig({
+  // Save config (non-secret)
+  final nextConfig = <String, String>{
     'keyAlias': keyAlias,
-    'storePassword': storePassword,
     'commonName': commonName,
     'organizationalUnit': organizationalUnit,
     'organization': organization,
@@ -100,113 +164,159 @@ storeFile=cert/key.jks
     'state': state,
     'countryCode': countryCode,
     'validity': validity,
-  });
+  };
 
-  // Success message
-  print('\n✅ Keystore generated successfully!\n');
-  print('═══════════════════════════════════════════════════');
-  print('   Summary');
-  print('═══════════════════════════════════════════════════');
-  print('📦 App name:      $appName');
-  print('🔑 Key alias:     $keyAlias');
-  print('🔐 Password:      $storePassword');
-  print('📂 Keystore:      $keystorePath');
-  print('📄 Properties:    ${propertiesFile.path}');
-  print('⏰ Valid for:     $validity days (~${(int.parse(validity) / 365).toStringAsFixed(1)} years)');
-  print('═══════════════════════════════════════════════════\n');
-
-  print('Next steps:');
-  print('1. Copy files to your Flutter project:');
-  print('   cp $appName/key.properties android/');
-  print('   cp -r $appName/cert android/\n');
-  print('2. Update android/app/build.gradle (see README.md)');
-  print('3. Build your release APK/AAB:');
-  print('   flutter build apk --release\n');
-  
-  print('⚠️  IMPORTANT: Backup these files securely!');
-  print('   Losing the keystore means you cannot update your app.\n');
-
-  // Verify keystore
-  print('Would you like to verify the keystore now? (y/n): ');
-  final verify = stdin.readLineSync()?.toLowerCase();
-  
-  if (verify == 'y' || verify == 'yes') {
-    print('\n🔍 Verifying keystore...\n');
-    final verifyResult = await Process.run('keytool', [
-      '-list',
-      '-v',
-      '-keystore', keystorePath,
-      '-alias', keyAlias,
-      '-storepass', storePassword,
-    ]);
-    print(verifyResult.stdout);
+  if (savePassword) {
+    nextConfig['storePassword'] = storePassword;
+    print('⚠️  --save-password enabled. NEVER commit $_configFileName');
   }
 
-  print('\n✨ Done!');
+  if (!flags.boolFlag('no-save-config')) {
+    await _saveConfig(nextConfig);
+  }
+
+  // Summary
+  print('\n══════════════════════════════════════');
+  print('✅ DONE');
+  print('══════════════════════════════════════');
+  print('📦 App:        $appBasePath');
+  print('📂 Keystore:   $keystorePath');
+  print('📄 Properties: ${propertiesFile.path}');
+  print('🔑 Alias:      $keyAlias');
+  print('══════════════════════════════════════\n');
+
+  // Verify
+  final verify = flags.boolFlag('verify') ||
+      (!ciMode && _yesNo('Verify keystore now?', defaultYes: false));
+
+  if (verify) {
+    print('\n🔍 Verifying keystore...\n');
+    final verifyResult = await _runKeytool([
+      '-list',
+      '-v',
+      '-keystore',
+      keystorePath,
+      '-alias',
+      keyAlias,
+      '-storepass',
+      storePassword,
+    ]);
+    stdout.write(verifyResult.stdout);
+    if (verifyResult.exitCode != 0) {
+      stderr.write(verifyResult.stderr);
+      exit(11);
+    }
+  }
+
+  print('\nNext steps:');
+  print('cp $appBasePath/key.properties android/');
+  print('cp -r $appBasePath/cert android/');
+  print('\n⚠️ Backup keystore & passwords securely.');
 }
 
-Future<bool> isKeytoolAvailable() async {
+void _banner() {
+  print('══════════════════════════════════════');
+  print('   Android Keystore Generator');
+  print('══════════════════════════════════════\n');
+}
+
+void _err(String msg) => print('❌ $msg');
+
+Future<bool> _isKeytoolAvailable() async {
   try {
-    final result = await Process.run('keytool', ['-help']);
-    return result.exitCode == 0 || result.exitCode == 1; // keytool returns 1 for help
-  } catch (e) {
+    final r = await _runKeytool(['-help']);
+    return r.exitCode == 0 || r.exitCode == 1;
+  } catch (_) {
     return false;
   }
 }
 
-Future<Map<String, String>> loadConfig() async {
-  try {
-    final configFile = File('.keystore_config.json');
-    if (await configFile.exists()) {
-      final content = await configFile.readAsString();
-      final Map<String, dynamic> json = jsonDecode(content);
-      return json.map((key, value) => MapEntry(key, value.toString()));
-    }
-  } catch (e) {
-    // If config doesn't exist or is invalid, return empty map
-  }
-  return {};
+Future<ProcessResult> _runKeytool(List<String> args) {
+  return Process.run('keytool', args, runInShell: Platform.isWindows);
 }
 
-Future<void> saveConfig(Map<String, String> config) async {
-  try {
-    final configFile = File('.keystore_config.json');
-    await configFile.writeAsString(jsonEncode(config));
-    print('✅ Configuration saved for future use');
-  } catch (e) {
-    print('⚠️  Warning: Could not save configuration: $e');
-  }
+String _sanitizeDirName(String input) =>
+    input.replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_');
+
+String _generatePassword({int length = 28}) {
+  final rand = Random.secure();
+  const chars =
+      'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@#%_-';
+  return List.generate(length, (_) => chars[rand.nextInt(chars.length)]).join();
 }
 
-String generatePassword() {
-  final timestamp = DateTime.now().millisecondsSinceEpoch;
-  final random = timestamp.hashCode.abs();
-  return 'Key${random}Secure';
-}
-
-String prompt(String message, {String? defaultValue, bool required = false, bool isPassword = false}) {
+String _prompt(String message, {bool required = false}) {
   while (true) {
-    if (defaultValue != null) {
-      stdout.write('$message [$defaultValue]: ');
-    } else {
-      stdout.write('$message: ');
-    }
-
+    stdout.write('$message: ');
     final input = stdin.readLineSync()?.trim() ?? '';
-
-    if (input.isEmpty && defaultValue != null) {
-      return defaultValue;
-    }
-
-    if (input.isEmpty && required) {
-      print('❌ This field is required. Please try again.');
+    if (required && input.isEmpty) {
+      _err('Required.');
       continue;
     }
-
-    if (input.isEmpty && !required) {
-      return '';
-    }
-
     return input;
   }
+}
+
+bool _yesNo(String message, {bool defaultYes = true}) {
+  stdout.write('$message ${defaultYes ? "[Y/n]" : "[y/N]"}: ');
+  final input = (stdin.readLineSync() ?? '').toLowerCase();
+  if (input.isEmpty) return defaultYes;
+  return input == 'y' || input == 'yes';
+}
+
+Future<Map<String, String>> _loadConfig() async {
+  try {
+    final f = File(_configFileName);
+    if (!await f.exists()) return {};
+    final Map<String, dynamic> j =
+    jsonDecode(await f.readAsString());
+    return j.map((k, v) => MapEntry(k, v.toString()));
+  } catch (_) {
+    return {};
+  }
+}
+
+Future<void> _saveConfig(Map<String, String> config) async {
+  try {
+    await File(_configFileName).writeAsString(
+      const JsonEncoder.withIndent('  ').convert(config),
+      flush: true,
+    );
+    print('✅ Saved defaults to $_configFileName');
+  } catch (e) {
+    print('⚠️  Could not save config: $e');
+  }
+}
+
+class _Flags {
+  final Map<String, String?> _vals;
+  final Set<String> _bools;
+  _Flags(this._vals, this._bools);
+  String? value(String key) => _vals[key];
+  bool boolFlag(String key) => _bools.contains(key);
+}
+
+_Flags _parseArgs(List<String> args) {
+  final vals = <String, String?>{};
+  final bools = <String>{};
+  String? pending;
+
+  for (final a in args) {
+    if (a.startsWith('--')) {
+      pending = null;
+      final p = a.substring(2);
+      if (p.contains('=')) {
+        final s = p.split('=');
+        vals[s.first] = s.sublist(1).join('=');
+      } else {
+        pending = p;
+        bools.add(p);
+      }
+    } else if (pending != null) {
+      bools.remove(pending);
+      vals[pending] = a;
+      pending = null;
+    }
+  }
+  return _Flags(vals, bools);
 }
