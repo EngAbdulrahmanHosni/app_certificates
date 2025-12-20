@@ -1,23 +1,21 @@
 name: Normalize App Name
+description: Normalize app name to safe directory name
 
-on:
-  workflow_call:
-    inputs:
-      app_name:
-        required: true
-        type: string
-    outputs:
-      safe_app:
-        value: ${{ jobs.normalize.outputs.safe_app }}
+inputs:
+  app_name:
+    required: true
 
-jobs:
-  normalize:
-    runs-on: ubuntu-latest
-    outputs:
-      safe_app: ${{ steps.norm.outputs.safe_app }}
+outputs:
+  safe_app:
+    description: Normalized app name
+    value: ${{ steps.normalize.outputs.safe_app }}
 
-    steps:
-      - id: norm
-        run: |
-          SAFE_APP=$(echo "${{ inputs.app_name }}" | sed 's/[^a-zA-Z0-9_-]/_/g')
-          echo "safe_app=$SAFE_APP" >> $GITHUB_OUTPUT
+runs:
+  using: composite
+  steps:
+    - id: normalize
+      shell: bash
+      run: |
+        SAFE_APP=$(echo "${{ inputs.app_name }}" | sed 's/[^a-zA-Z0-9_-]/_/g')
+        echo "safe_app=$SAFE_APP" >> $GITHUB_OUTPUT
+        echo "SAFE_APP=$SAFE_APP" >> $GITHUB_ENV
