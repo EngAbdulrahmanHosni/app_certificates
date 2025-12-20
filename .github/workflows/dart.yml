@@ -1,0 +1,32 @@
+name: Generate Android Keystore
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate-keystore:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Java (keytool)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Generate keystore (CI mode)
+        env:
+          CI: "true"
+          APP_NAME: ${{ secrets.APP_NAME }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          dart generate_keystore.dart --ci --verify
