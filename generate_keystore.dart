@@ -2,11 +2,11 @@
 // ignore_for_file: avoid_print
 
 /*
-  Android Keystore Generator (CI/CD safe)
+  Android Keystore Generator (CI/CD SAFE)
 
   - Generates keystore under apps/<app_name>/
-  - Supports CI mode
-  - Auto fallback if KEY_PASSWORD is missing or empty
+  - CI friendly
+  - Auto fallback for empty KEY_PASSWORD
 */
 
 import 'dart:convert';
@@ -30,17 +30,19 @@ Future<void> main(List<String> args) async {
   final config = await _loadConfig();
 
   final appName = flags.value('app') ??
-      (ciMode ? Platform.environment['APP_NAME'] ?? '' : _prompt('App name', required: true));
+      (ciMode
+          ? Platform.environment['APP_NAME'] ?? ''
+          : _prompt('App name', required: true));
 
   if (appName.trim().isEmpty) {
-    _err('App name is required');
+    _err('App name is required.');
     exit(2);
   }
 
   final safeApp = _sanitizeDirName(appName);
-  if (!await Directory(_appsBaseDir).exists()) {
-    await Directory(_appsBaseDir).create();
-  }
+
+  // ensure apps/ exists
+  await Directory(_appsBaseDir).create(recursive: true);
 
   final appDir = '$_appsBaseDir/$safeApp';
   final certDir = Directory('$appDir/cert');
@@ -49,7 +51,7 @@ Future<void> main(List<String> args) async {
 
   if (!flags.boolFlag('overwrite')) {
     if (await File(keystorePath).exists()) {
-      _err('Keystore already exists. Use --overwrite');
+      _err('Keystore already exists. Use --overwrite.');
       exit(3);
     }
   }
@@ -82,6 +84,7 @@ Future<void> main(List<String> args) async {
 
   final dname = 'CN=Unknown, OU=Dev, O=Company, L=NA, ST=NA, C=US';
 
+  print('\n🔐 Generating keystore...');
   final result = await _runKeytool([
     '-genkeypair',
     '-keystore', keystorePath,
@@ -110,14 +113,19 @@ storeFile=cert/key.jks
   print('\n════════════════════════════');
   print('✅ DONE');
   print('════════════════════════════');
-  print('Keystore: $keystorePath');
-  print('Properties: ${propsFile.path}');
+  print('📦 App: $appDir');
+  print('📂 Keystore: $keystorePath');
+  print('📄 Properties: ${propsFile.path}');
 }
 
 void _banner() {
   print('════════════════════════════');
   print(' Android Keystore Generator ');
   print('════════════════════════════');
+}
+
+void _err(String msg) {
+  stderr.writeln('❌ $msg');
 }
 
 Future<bool> _isKeytoolAvailable() async {
@@ -133,7 +141,7 @@ Future<ProcessResult> _runKeytool(List<String> args) =>
     Process.run('keytool', args, runInShell: Platform.isWindows);
 
 String _sanitizeDirName(String s) =>
-    s.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+    s.replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_');
 
 String _generatePassword({int length = 28}) {
   final r = Random.secure();
@@ -186,7 +194,7 @@ _Flags _parseArgs(List<String> a) {
       }
     } else if (p != null) {
       b.remove(p);
-      v[p!] = x;
+      v[p] = x;
       p = null;
     }
   }
