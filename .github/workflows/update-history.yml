@@ -11,35 +11,27 @@ on:
         type: string
 
 jobs:
-  history:
+  update-history:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      - run: |
+      - name: Update Keystore_History.md
+        run: |
           FILE="Keystore_History.md"
-          DATE=$(date -u +"%Y-%m-%d %H:%M:%S")
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
 
           if [ ! -f "$FILE" ]; then
-            cat <<EOF > $FILE
-# 🔐 Android Keystore History
-
-⚠️ Auto-generated. Manual edits forbidden.
-
----
-
-## 📜 History Log
-
-| Date (UTC) | App | Action | Actor | Run |
-|-----------|-----|--------|-------|-----|
-EOF
+            echo "# 🔐 Keystore History" > "$FILE"
+            echo "" >> "$FILE"
+            echo "| Date | App | Action |" >> "$FILE"
+            echo "|------|-----|--------|" >> "$FILE"
           fi
 
-          sed -i '/HISTORY_HASH/d' "$FILE"
-          echo "| $DATE | ${{ inputs.safe_app }} | ${{ inputs.action_type }} | ${{ github.actor }} | [Run]($RUN_URL) |" >> "$FILE"
+          echo "| $DATE | ${{ inputs.safe_app }} | ${{ inputs.action_type }} |" >> "$FILE"
 
-          HASH=$(sed -n '/## 📜 History Log/,/---/p' "$FILE" | sha256sum | awk '{print $1}')
-          echo "" >> "$FILE"
-          echo "<!-- HISTORY_HASH: $HASH -->" >> "$FILE"
+      - name: Protect history file from manual edits
+        run: |
+          echo "Keystore_History.md is managed automatically by GitHub Actions." > .gitignore.tmp
