@@ -1,37 +1,17 @@
 name: Update Keystore History
 
-on:
-  workflow_call:
-    inputs:
-      safe_app:
-        required: true
-        type: string
-      action_type:
-        required: true
-        type: string
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        FILE="Keystore_History.md"
 
-jobs:
-  update-history:
-    runs-on: ubuntu-latest
+        if [ ! -f "$FILE" ]; then
+          echo "# 🔐 Keystore History" > $FILE
+          echo "" >> $FILE
+          echo "| Date | App | Action | Actor |" >> $FILE
+          echo "|------|-----|--------|-------|" >> $FILE
+        fi
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Update Keystore_History.md
-        run: |
-          FILE="Keystore_History.md"
-          DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
-
-          if [ ! -f "$FILE" ]; then
-            echo "# 🔐 Keystore History" > "$FILE"
-            echo "" >> "$FILE"
-            echo "| Date | App | Action |" >> "$FILE"
-            echo "|------|-----|--------|" >> "$FILE"
-          fi
-
-          echo "| $DATE | ${{ inputs.safe_app }} | ${{ inputs.action_type }} |" >> "$FILE"
-
-      - name: Protect history file from manual edits
-        run: |
-          echo "Keystore_History.md is managed automatically by GitHub Actions." > .gitignore.tmp
+        echo "| $(date '+%Y-%m-%d %H:%M') | $SAFE_APP | CREATE/UPDATE | $GITHUB_ACTOR |" >> $FILE
