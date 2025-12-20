@@ -1,25 +1,23 @@
 name: Resolve Keystore Password
 
-on:
-  workflow_call:
-    inputs:
-      keystore_password:
-        required: false
-        type: string
+inputs:
+  keystore_password:
+    required: false
 
-jobs:
-  password:
-    runs-on: ubuntu-latest
-
-    steps:
-      - run: |
-          if [ -n "${{ inputs.keystore_password }}" ]; then
-            echo "::add-mask::${{ inputs.keystore_password }}"
-            echo "KEYSTORE_PASSWORD=${{ inputs.keystore_password }}" >> $GITHUB_ENV
-            echo "KEY_PASSWORD=${{ inputs.keystore_password }}" >> $GITHUB_ENV
-          else
-            GEN=$(openssl rand -base64 32 | tr -d '=+/')
-            echo "::add-mask::$GEN"
-            echo "KEYSTORE_PASSWORD=$GEN" >> $GITHUB_ENV
-            echo "KEY_PASSWORD=$GEN" >> $GITHUB_ENV
-          fi
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        if [ -n "${{ inputs.keystore_password }}" ]; then
+          echo "::add-mask::${{ inputs.keystore_password }}"
+          echo "KEYSTORE_PASSWORD=${{ inputs.keystore_password }}" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=${{ inputs.keystore_password }}" >> $GITHUB_ENV
+          echo "🔐 Using provided password"
+        else
+          GEN_PASS=$(openssl rand -base64 32 | tr -d '=+/')
+          echo "::add-mask::$GEN_PASS"
+          echo "KEYSTORE_PASSWORD=$GEN_PASS" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=$GEN_PASS" >> $GITHUB_ENV
+          echo "🔐 Generated strong password"
+        fi
