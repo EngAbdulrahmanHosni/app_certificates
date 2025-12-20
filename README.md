@@ -12,12 +12,12 @@ Use the Dart script to generate a new keystore with one command:
 dart generate_keystore.dart
 ```
 
-The script will prompt you for:
-- App name
-- Store password
-- Key password
-- Key alias
-- Certificate details (name, organization, etc.)
+The script will only ask for the **app name**. Everything else is automatically configured:
+- Password: Auto-generated secure password
+- Key alias: `key` (default)
+- Certificate details: Default values from saved configuration
+
+**Note:** The script saves all configuration (including the password) to `.keystore_config.json` and reuses it for future keystores. This means you only need to enter the app name for subsequent keystore generations!
 
 ### Manual Keystore Generation
 
@@ -222,6 +222,7 @@ Add these lines to your Flutter project's `.gitignore`:
 key.properties
 android/key.properties
 android/cert/
+.keystore_config.json
 ```
 
 ## Environment Variables (Alternative)

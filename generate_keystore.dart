@@ -1,6 +1,7 @@
 #!/usr/bin/env dart
 
 import 'dart:io';
+import 'dart:convert';
 
 void main(List<String> args) async {
   print('═══════════════════════════════════════════════════');
@@ -17,28 +18,33 @@ void main(List<String> args) async {
     exit(1);
   }
 
+  // Load saved configuration if exists
+  final config = await loadConfig();
+  
   // Gather information
   print('Please provide the following information:\n');
 
   final appName = prompt('App name (e.g., my_app)', required: true);
-  final keyAlias = prompt('Key alias', defaultValue: 'key');
-  final storePassword = prompt('Store password', required: true, isPassword: true);
-  final keyPassword = prompt('Key password (press Enter to use same as store password)', 
-                              defaultValue: storePassword, isPassword: true);
   
-  print('\n--- Certificate Information ---\n');
+  // Use saved config or defaults for everything else
+  final keyAlias = config['keyAlias'] ?? 'key';
+  final storePassword = config['storePassword'] ?? generatePassword();
+  final keyPassword = storePassword;
   
-  final commonName = prompt('Your name or organization', defaultValue: 'Unknown');
-  final organizationalUnit = prompt('Organizational unit', defaultValue: 'Development');
-  final organization = prompt('Organization', defaultValue: 'My Company');
-  final city = prompt('City', defaultValue: 'Unknown');
-  final state = prompt('State/Province', defaultValue: 'Unknown');
-  final countryCode = prompt('Country code (2 letters)', defaultValue: 'US');
+  final commonName = config['commonName'] ?? 'Unknown';
+  final organizationalUnit = config['organizationalUnit'] ?? 'Development';
+  final organization = config['organization'] ?? 'My Company';
+  final city = config['city'] ?? 'Unknown';
+  final state = config['state'] ?? 'Unknown';
+  final countryCode = config['countryCode'] ?? 'US';
+  final validity = config['validity'] ?? '10000';
   
-  final validity = prompt('Validity in days', defaultValue: '10000');
+  print('\n✅ Using configuration:');
+  print('   Key alias: $keyAlias');
+  print('   Organization: $organization');
+  print('   Validity: $validity days\n');
 
   // Create directory structure
-  final appDir = Directory(appName);
   final certDir = Directory('$appName/cert');
   
   print('\n📁 Creating directory structure...');
@@ -83,6 +89,19 @@ storeFile=cert/key.jks
   final propertiesFile = File('$appName/key.properties');
   await propertiesFile.writeAsString(propertiesContent);
 
+  // Save configuration for future use
+  await saveConfig({
+    'keyAlias': keyAlias,
+    'storePassword': storePassword,
+    'commonName': commonName,
+    'organizationalUnit': organizationalUnit,
+    'organization': organization,
+    'city': city,
+    'state': state,
+    'countryCode': countryCode,
+    'validity': validity,
+  });
+
   // Success message
   print('\n✅ Keystore generated successfully!\n');
   print('═══════════════════════════════════════════════════');
@@ -90,6 +109,7 @@ storeFile=cert/key.jks
   print('═══════════════════════════════════════════════════');
   print('📦 App name:      $appName');
   print('🔑 Key alias:     $keyAlias');
+  print('🔐 Password:      $storePassword');
   print('📂 Keystore:      $keystorePath');
   print('📄 Properties:    ${propertiesFile.path}');
   print('⏰ Valid for:     $validity days (~${(int.parse(validity) / 365).toStringAsFixed(1)} years)');
@@ -132,6 +152,36 @@ Future<bool> isKeytoolAvailable() async {
   } catch (e) {
     return false;
   }
+}
+
+Future<Map<String, String>> loadConfig() async {
+  try {
+    final configFile = File('.keystore_config.json');
+    if (await configFile.exists()) {
+      final content = await configFile.readAsString();
+      final Map<String, dynamic> json = jsonDecode(content);
+      return json.map((key, value) => MapEntry(key, value.toString()));
+    }
+  } catch (e) {
+    // If config doesn't exist or is invalid, return empty map
+  }
+  return {};
+}
+
+Future<void> saveConfig(Map<String, String> config) async {
+  try {
+    final configFile = File('.keystore_config.json');
+    await configFile.writeAsString(jsonEncode(config));
+    print('✅ Configuration saved for future use');
+  } catch (e) {
+    print('⚠️  Warning: Could not save configuration: $e');
+  }
+}
+
+String generatePassword() {
+  final timestamp = DateTime.now().millisecondsSinceEpoch;
+  final random = timestamp.hashCode.abs();
+  return 'Key${random}Secure';
 }
 
 String prompt(String message, {String? defaultValue, bool required = false, bool isPassword = false}) {
