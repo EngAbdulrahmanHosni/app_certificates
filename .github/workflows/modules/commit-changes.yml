@@ -1,0 +1,26 @@
+name: Commit Changes
+
+on:
+  workflow_call:
+    inputs:
+      safe_app:
+        required: true
+        type: string
+      action_type:
+        required: true
+        type: string
+
+jobs:
+  commit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add apps/${{ inputs.safe_app }} Keystore_History.md
+          git commit -m "🔐 ${{ inputs.action_type }} keystore for ${{ inputs.safe_app }}" || echo "No changes"
+          git push
