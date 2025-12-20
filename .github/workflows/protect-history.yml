@@ -1,0 +1,31 @@
+name: Protect Keystore History
+
+on:
+  push:
+    branches: ["main", "master"]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Block manual edits to Keystore_History.md
+        run: |
+          set -e
+          # Check changed files in the last commit
+          CHANGED=$(git diff-tree --no-commit-id --name-only -r $GITHUB_SHA)
+
+          if echo "$CHANGED" | grep -q "^Keystore_History.md$"; then
+            if [ "${{ github.actor }}" != "github-actions[bot]" ]; then
+              echo "❌ Manual edits to Keystore_History.md are not allowed."
+              exit 1
+            fi
+          fi
+
+          echo "✅ OK"
