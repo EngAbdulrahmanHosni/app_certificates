@@ -61,9 +61,14 @@ Future<void> main(List<String> args) async {
   final keyAlias = flags.value('alias') ?? config['keyAlias'] ?? 'key';
   final validity = flags.value('validity') ?? config['validity'] ?? '10000';
 
+  String? envStorePass = Platform.environment['KEYSTORE_PASSWORD'];
+  if (envStorePass != null && envStorePass.trim().isEmpty) {
+    envStorePass = null;
+  }
+
   final storePassword =
       flags.value('storepass') ??
-      Platform.environment['KEYSTORE_PASSWORD'] ??
+      envStorePass ??
       _generatePassword();
 
   String? envKeyPass = Platform.environment['KEY_PASSWORD'];
