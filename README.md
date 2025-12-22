@@ -1,17 +1,23 @@
-# 🔐 Android Keystore Vault Dashboard
+# 🔐 Android Keystore Vault
 
-هذا المستودع مسؤول عن إدارة وتخزين keystores لجميع التطبيقات.
+This repository manages Android Keystores for all applications.
 
-## 📊 Applications Overview
+## 🚀 How to Generate a Keystore
 
-| App Name | Folder | Keystore | Last Update | Status |
-|--------|--------|---------|------------|--------|
-| aaaaaaa | `apps/aaaaaaa` | ✅ Exists | - | 🟢 Active |
-| o_smart_mobile | `apps/o_smart_mobile` | ✅ Exists | %Y->- (grafted, HEAD -> main, origin/main) | 🟢 Active |
-| o_smart_mobile copy | `apps/o_smart_mobile copy` | ✅ Exists | %Y->- (grafted, HEAD -> main, origin/main) | 🟢 Active |
+You can generate a new keystore or update an existing one manually via GitHub Actions:
 
-## 🕒 Recent Activity
-> يتم توليد هذا القسم تلقائيًا من `Keystore_History.md`
+1. Go to the **Actions** tab.
+2. Select **Generate Android Keystore** from the sidebar.
+3. Click **Run workflow**.
+4. Fill in the inputs:
+   - **App name**: Folder name under `apps/` (e.g., `my_app`).
+   - **Keystore password**: (Optional) Leave empty to checking auto-generate.
+   - **Key password**: (Optional) Leave empty to use keystore password.
+   - **Verify**: Check to verify the keystore after generation.
+   - **Commit changes**: Uncheck if you only want to test without saving.
+
+## 📜 Activity Log
+> Auto-generated from `Keystore_History.md`
 
 # 🔐 Android Keystore History
 
