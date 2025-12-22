@@ -6,7 +6,8 @@
 
 | App Name | Folder | Keystore | Last Update | Status |
 |--------|--------|---------|------------|--------|
-| aaaaaaa | `apps/aaaaaaa` | ✅ Exists | - | 🟢 Active |
+| aaaaaaa | `apps/aaaaaaa` | ✅ Exists | %Y->- (grafted, HEAD -> main, origin/main) | 🟢 Active |
+| abdo | `apps/abdo` | ✅ Exists | - | 🟢 Active |
 | o_smart_mobile | `apps/o_smart_mobile` | ✅ Exists | %Y->- (grafted, HEAD -> main, origin/main) | 🟢 Active |
 | o_smart_mobile copy | `apps/o_smart_mobile copy` | ✅ Exists | %Y->- (grafted, HEAD -> main, origin/main) | 🟢 Active |
 
@@ -30,6 +31,7 @@
 
 <!-- HISTORY_HASH: 9f2a7e4b8c0d... -->
 | 2025-12-22 14:49:52 UTC | aaaaaaa | EngAbdulrahmanHosni |
+| 2025-12-22 15:06:04 UTC | abdo | EngAbdulrahmanHosni |
 
 ---
 _Last updated automatically by CI_
