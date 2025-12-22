@@ -7,13 +7,9 @@
 
 ## 📜 History Log
 
-| Date (UTC) | App Name | Action | Actor | Workflow Run |
+| Date (UTC) | App Name | Actor |
 |-----------|----------|--------|-------|--------------|
 | 2025-12-20 22:40:23 | care_p_o | CREATE | EngAbdulrahmanHosni | Run |
-
----
-
-<!-- HISTORY_HASH: 9f2a7e4b8c0d... -->
 | 2025-12-22 14:49:52 UTC | aaaaaaa | EngAbdulrahmanHosni |
 | 2025-12-22 15:06:04 UTC | abdo | EngAbdulrahmanHosni |
 | 2025-12-22 15:24:44 UTC | ammar | EngAbdulrahmanHosni |
