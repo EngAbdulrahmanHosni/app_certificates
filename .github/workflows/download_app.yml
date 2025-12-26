@@ -4,13 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       app_name:
-        description: "Select App to Download"
+        description: "App Name (folder name)"
         required: true
-        type: choice
-        options:
-          - abdo
-          - o_smart
-          - omar
+        type: string
 
 jobs:
   download-app:
@@ -22,7 +18,12 @@ jobs:
       - name: Zip App Folder
         run: |
           APP_NAME="${{ inputs.app_name }}"
-          zip -r "${APP_NAME}-keystore.zip" "apps/${APP_NAME}"
+          if [ -d "apps/$APP_NAME" ]; then
+            zip -r "${APP_NAME}-keystore.zip" "apps/${APP_NAME}"
+          else
+            echo "Error: App '$APP_NAME' not found in apps/ directory."
+            exit 1
+          fi
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
